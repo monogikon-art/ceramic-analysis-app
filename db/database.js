@@ -102,27 +102,59 @@ class PgWrapper {
                 // Handle RETURNING id for INSERTs
                 let finalSql = pgSql;
                 if (/^\s*INSERT\s+INTO/i.test(finalSql) && !/RETURNING/i.test(finalSql)) {
-                    finalSql = finalSql.replace(/;\s*$/, '') + ' RETURNING id';
+                    // Strip trailing semicolons/whitespace then add RETURNING id
+                    finalSql = finalSql.replace(/[\s;]+$/, '') + ' RETURNING id';
                 }
-                const result = await pool.query(finalSql, params);
-                return {
-                    lastInsertRowid: result.rows[0]?.id,
-                    changes: result.rowCount
-                };
+                try {
+                    const result = await pool.query(finalSql, params);
+                    return {
+                        lastInsertRowid: result.rows[0]?.id,
+                        changes: result.rowCount
+                    };
+                } catch (e) {
+                    console.error('DB run error:', e.message, '\nSQL:', finalSql.substring(0, 200));
+                    throw e;
+                }
             },
             async get(...params) {
-                const result = await pool.query(pgSql, params);
-                return result.rows[0];
+                try {
+                    const result = await pool.query(pgSql, params);
+                    return result.rows[0];
+                } catch (e) {
+                    console.error('DB get error:', e.message, '\nSQL:', pgSql.substring(0, 200));
+                    throw e;
+                }
             },
             async all(...params) {
-                const result = await pool.query(pgSql, params);
-                return result.rows;
+                try {
+                    const result = await pool.query(pgSql, params);
+                    return result.rows;
+                } catch (e) {
+                    console.error('DB all error:', e.message, '\nSQL:', pgSql.substring(0, 200));
+                    throw e;
+                }
             }
         };
     }
 
     async exec(sql) {
-        await this.pool.query(sql);
+        // Split multi-statement SQL and execute each statement individually
+        // This handles cases where pg doesn't support multi-statement queries well
+        const statements = sql
+            .split(/;\s*\n/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0 && !s.startsWith('--') && !s.startsWith('PRAGMA'));
+
+        for (const stmt of statements) {
+            try {
+                await this.pool.query(stmt);
+            } catch (e) {
+                // Skip "already exists" errors for CREATE TABLE/INDEX IF NOT EXISTS
+                if (e.message.includes('already exists')) continue;
+                console.error('Schema exec error:', e.message, '\nStatement:', stmt.substring(0, 150));
+                throw e;
+            }
+        }
     }
 
     pragma() { /* no-op for PostgreSQL */ }
@@ -159,9 +191,17 @@ async function createDatabase() {
         const { Pool } = require('pg');
         const pool = new Pool({
             connectionString: process.env.DATABASE_URL,
-            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+            ssl: { rejectUnauthorized: false }
         });
-        console.log('🐘 Connected to PostgreSQL');
+        // Test connection
+        try {
+            const client = await pool.connect();
+            client.release();
+            console.log('🐘 Connected to PostgreSQL');
+        } catch (e) {
+            console.error('❌ PostgreSQL connection failed:', e.message);
+            throw e;
+        }
         return new PgWrapper(pool);
     } else {
         // SQLite mode (local development)
