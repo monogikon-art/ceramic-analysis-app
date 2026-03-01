@@ -37,6 +37,7 @@ app.use('/api/samples', require('./routes/samples'));
 app.use('/api/analyses', require('./routes/analyses'));
 app.use('/api/petrography', require('./routes/petrography'));
 app.use('/api/processing', require('./routes/processing'));
+app.use('/api/import-export', require('./routes/import-export'));
 
 // SPA fallback
 app.get('*', (req, res) => {

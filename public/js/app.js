@@ -138,6 +138,8 @@ const App = {
             case 'processing': Processing.load(); break;
             case 'projects': Projects.load(); break;
             case 'fabric-groups': Petrography.loadFabricGroups(); break;
+            case 'import-export': ImportExport.init(); break;
+            case 'sop': SOP.init(); break;
         }
     },
 
