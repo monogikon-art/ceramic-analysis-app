@@ -1,0 +1,22 @@
+databases:
+  - name: ceramicdb-postgres
+    plan: free
+    databaseName: ceramicdb
+    user: ceramicdb_user
+
+services:
+  - type: web
+    name: ceramicdb
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ceramicdb-postgres
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production

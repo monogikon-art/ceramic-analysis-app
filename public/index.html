@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="CeramicDB — Ceramic Analysis & Elemental Data Processing for Archaeological Research">
+    <title>CeramicDB — Ceramic Analysis Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <!-- Login/Register Screen -->
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-bg-pattern"></div>
+        <div class="auth-container">
+            <div class="auth-logo">
+                <div class="auth-logo-icon">🏺</div>
+                <h1>CeramicDB</h1>
+                <p class="auth-subtitle">Ceramic Analysis & Elemental Data Processing</p>
+                <p class="auth-tagline">For Archaeological Research Communities</p>
+            </div>
+
+            <!-- Login Form -->
+            <div id="login-form" class="auth-card">
+                <h2>Sign In</h2>
+                <form onsubmit="return App.login(event)">
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input type="email" id="login-email" placeholder="researcher@university.edu" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full" id="login-btn">Sign In</button>
+                    <p class="auth-switch">Don't have an account? <a href="#" onclick="App.showRegister()">Register</a>
+                    </p>
+                </form>
+            </div>
+
+            <!-- Register Form -->
+            <div id="register-form" class="auth-card" style="display:none">
+                <h2>Create Account</h2>
+                <form onsubmit="return App.register(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="reg-fname">First Name</label>
+                            <input type="text" id="reg-fname" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="reg-lname">Last Name</label>
+                            <input type="text" id="reg-lname" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-email">Email</label>
+                        <input type="email" id="reg-email" placeholder="researcher@university.edu" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-password">Password</label>
+                        <input type="password" id="reg-password" minlength="6" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="reg-university">University</label>
+                            <input type="text" id="reg-university" placeholder="University of...">
+                        </div>
+                        <div class="form-group">
+                            <label for="reg-department">Department</label>
+                            <input type="text" id="reg-department" placeholder="Archaeology">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full" id="reg-btn">Create Account</button>
+                    <p class="auth-switch">Already have an account? <a href="#" onclick="App.showLogin()">Sign In</a>
+                    </p>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="app-screen" class="app-screen" style="display:none">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">🏺</div>
+                <span class="sidebar-title">CeramicDB</span>
+            </div>
+            <ul class="sidebar-nav">
+                <li><a href="#" data-page="dashboard" class="nav-link active" id="nav-dashboard">
+                        <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+                    </a></li>
+                <li><a href="#" data-page="samples" class="nav-link" id="nav-samples">
+                        <span class="nav-icon">🏺</span><span class="nav-label">Samples</span>
+                    </a></li>
+                <li><a href="#" data-page="analyses" class="nav-link" id="nav-analyses">
+                        <span class="nav-icon">🔬</span><span class="nav-label">Analyses</span>
+                    </a></li>
+                <li><a href="#" data-page="petrography" class="nav-link" id="nav-petrography">
+                        <span class="nav-icon">🔍</span><span class="nav-label">Petrography</span>
+                    </a></li>
+                <li><a href="#" data-page="processing" class="nav-link" id="nav-processing">
+                        <span class="nav-icon">📈</span><span class="nav-label">Data Processing</span>
+                    </a></li>
+                <li><a href="#" data-page="projects" class="nav-link" id="nav-projects">
+                        <span class="nav-icon">📁</span><span class="nav-label">Projects</span>
+                    </a></li>
+                <li><a href="#" data-page="fabric-groups" class="nav-link" id="nav-fabric-groups">
+                        <span class="nav-icon">🧱</span><span class="nav-label">Fabric Groups</span>
+                    </a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <div class="user-info" id="user-info">
+                    <div class="user-avatar" id="user-avatar">SU</div>
+                    <div class="user-details">
+                        <span class="user-name" id="user-name">User</span>
+                        <span class="user-role" id="user-role">Researcher</span>
+                    </div>
+                </div>
+                <button class="btn btn-ghost btn-sm" onclick="App.logout()" title="Sign Out">↪ Sign Out</button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main id="main-content" class="main-content">
+            <!-- Notification area -->
+            <div id="notification-area" class="notification-area"></div>
+
+            <!-- Page containers -->
+            <div id="page-dashboard" class="page active"></div>
+            <div id="page-samples" class="page"></div>
+            <div id="page-analyses" class="page"></div>
+            <div id="page-petrography" class="page"></div>
+            <div id="page-processing" class="page"></div>
+            <div id="page-projects" class="page"></div>
+            <div id="page-fabric-groups" class="page"></div>
+        </main>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-overlay" class="modal-overlay" style="display:none">
+        <div id="modal-content" class="modal-content"></div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script src="/js/dashboard.js"></script>
+    <script src="/js/samples.js"></script>
+    <script src="/js/analyses.js"></script>
+    <script src="/js/petrography.js"></script>
+    <script src="/js/processing.js"></script>
+    <script src="/js/projects.js"></script>
+</body>
+
+</html>
