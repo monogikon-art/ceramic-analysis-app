@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CeramicDB — Local Edition</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <!-- Top Toolbar -->
+    <header class="toolbar">
+        <div class="toolbar-left">
+            <div class="toolbar-brand">
+                <span class="brand-icon">🏺</span>
+                <span class="brand-name">CeramicDB</span>
+                <span class="brand-tag">Local Edition</span>
+            </div>
+        </div>
+        <div class="toolbar-actions">
+            <button class="tb-btn" onclick="App.addRow()" title="Add new row">
+                <span class="tb-icon">＋</span> Add Row
+            </button>
+            <button class="tb-btn tb-danger" onclick="App.deleteSelected()" title="Delete selected rows">
+                <span class="tb-icon">🗑</span> Delete
+            </button>
+            <div class="tb-divider"></div>
+            <button class="tb-btn" onclick="App.undo()" title="Undo last action">
+                <span class="tb-icon">↶</span> Undo
+            </button>
+            <div class="tb-divider"></div>
+            <button class="tb-btn tb-primary" onclick="App.sync()" id="sync-btn" title="Save all changes to Excel">
+                <span class="tb-icon">💾</span> Sync to Excel
+            </button>
+            <button class="tb-btn" onclick="App.reload()" title="Reload data from Excel file">
+                <span class="tb-icon">🔄</span> Reload
+            </button>
+            <div class="tb-divider"></div>
+            <button class="tb-btn" onclick="App.exportExcel()" title="Download as Excel">
+                <span class="tb-icon">📥</span> Export
+            </button>
+        </div>
+        <div class="toolbar-right">
+            <div class="sync-status" id="sync-status">
+                <span class="status-dot synced"></span>
+                <span class="status-text" id="status-text">Synced</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Sheet Tabs -->
+    <div class="sheet-tabs">
+        <button class="sheet-tab active" data-sheet="samples" onclick="App.switchSheet('samples')">
+            🏺 Samples
+        </button>
+        <button class="sheet-tab" data-sheet="analyses" onclick="App.switchSheet('analyses')">
+            🔬 Analyses
+        </button>
+        <button class="sheet-tab" data-sheet="fabric-groups" onclick="App.switchSheet('fabric-groups')">
+            🧱 Fabric Groups
+        </button>
+        <button class="sheet-tab" data-sheet="projects" onclick="App.switchSheet('projects')">
+            📁 Projects
+        </button>
+    </div>
+
+    <!-- Formula / Info Bar -->
+    <div class="info-bar">
+        <div class="cell-ref" id="cell-ref">A1</div>
+        <div class="info-bar-divider"></div>
+        <input type="text" class="cell-input" id="cell-input" placeholder="Select a cell to edit..." readonly>
+        <div class="info-summary" id="info-summary">Loading...</div>
+    </div>
+
+    <!-- Spreadsheet Grid -->
+    <div class="grid-wrapper" id="grid-wrapper">
+        <table class="grid" id="grid">
+            <thead id="grid-head"></thead>
+            <tbody id="grid-body"></tbody>
+        </table>
+    </div>
+
+    <!-- Status Bar -->
+    <footer class="status-bar">
+        <div class="status-left">
+            <span id="row-count">0 rows</span>
+            <span class="status-sep">|</span>
+            <span id="selected-count">0 selected</span>
+        </div>
+        <div class="status-center">
+            <span id="file-path">Loading...</span>
+        </div>
+        <div class="status-right">
+            <span id="last-sync">—</span>
+        </div>
+    </footer>
+
+    <script src="/js/app.js"></script>
+</body>
+
+</html>

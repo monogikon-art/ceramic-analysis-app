@@ -1,7 +1,10 @@
 node_modules/
 db/ceramicdb.sqlite
+data/*.xlsx
 uploads/microphotos/*
 !uploads/microphotos/.gitkeep
+local-edition/node_modules/
+local-edition/data/
 .env
 *.log
 .DS_Store

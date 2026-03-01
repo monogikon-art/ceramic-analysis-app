@@ -1,26 +1,36 @@
 /**
- * CeramicDB — Unified Async Database Layer
- * Supports both sql.js (local dev) and PostgreSQL (production).
- * Chosen based on DATABASE_URL env var.
+ * CeramicDB — Excel-backed SQLite Database Layer
+ * Uses sql.js (in-memory SQLite) as the query engine.
+ * Persists data to an Excel file (CeramicDB-Database.xlsx) after writes.
  */
 const fs = require('fs');
 const path = require('path');
+const XLSX = require('xlsx');
 
 const DB_PATH = path.join(__dirname, 'ceramicdb.sqlite');
+const EXCEL_DIR = path.join(__dirname, '..', 'data');
+const EXCEL_PATH = path.join(EXCEL_DIR, 'CeramicDB-Database.xlsx');
 
-// --- SQL placeholder conversion ---
-function sqliteToPostgres(sql) {
-    let i = 0;
-    return sql.replace(/\?/g, () => `$${++i}`);
-}
+// Tables to sync to Excel (table name → sheet name)
+const SYNC_TABLES = {
+    users: 'Users',
+    projects: 'Projects',
+    samples: 'Samples',
+    analyses: 'Analyses',
+    elemental_data: 'Elemental Data',
+    fabric_groups: 'Fabric Groups',
+    petrographic_observations: 'Petrography',
+    microphotographs: 'Microphotographs'
+};
 
 // ===================================================================
-//  SQLite Wrapper (sql.js) — for local development
+//  SQLite Wrapper with Excel Sync
 // ===================================================================
 class SqliteWrapper {
     constructor(sqlDb) {
         this._db = sqlDb;
         this._saveTimer = null;
+        this._excelTimer = null;
     }
 
     prepare(sql) {
@@ -69,158 +79,141 @@ class SqliteWrapper {
     }
 
     _scheduleSave() {
+        // Save SQLite to disk
         if (this._saveTimer) clearTimeout(this._saveTimer);
         this._saveTimer = setTimeout(() => this.save(), 500);
+
+        // Save to Excel (debounced longer to batch writes)
+        if (this._excelTimer) clearTimeout(this._excelTimer);
+        this._excelTimer = setTimeout(() => this.saveToExcel(), 2000);
     }
 
     save() {
         try {
             const data = this._db.export();
             fs.writeFileSync(DB_PATH, Buffer.from(data));
-        } catch (e) { console.error('Error saving database:', e.message); }
+        } catch (e) { console.error('Error saving SQLite:', e.message); }
+    }
+
+    // ── Excel sync ──────────────────────────────────────
+
+    saveToExcel() {
+        try {
+            if (!fs.existsSync(EXCEL_DIR)) fs.mkdirSync(EXCEL_DIR, { recursive: true });
+
+            const wb = XLSX.utils.book_new();
+
+            for (const [table, sheetName] of Object.entries(SYNC_TABLES)) {
+                try {
+                    const rows = this._db.exec(`SELECT * FROM ${table}`);
+                    if (rows.length > 0) {
+                        const data = rows[0].values.map(row => {
+                            const obj = {};
+                            rows[0].columns.forEach((col, i) => obj[col] = row[i]);
+                            return obj;
+                        });
+                        const ws = XLSX.utils.json_to_sheet(data);
+                        ws['!cols'] = rows[0].columns.map(c => ({ wch: Math.max(c.length + 2, 12) }));
+                        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                    } else {
+                        // Empty table — write headers only
+                        const ws = XLSX.utils.aoa_to_sheet([]);
+                        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                    }
+                } catch (e) {
+                    // Table might not exist yet during init
+                }
+            }
+
+            // Metadata sheet
+            const meta = [
+                { Key: 'Last Saved', Value: new Date().toISOString() },
+                { Key: 'Application', Value: 'CeramicDB v1.0' }
+            ];
+            const metaWs = XLSX.utils.json_to_sheet(meta);
+            XLSX.utils.book_append_sheet(wb, metaWs, 'Info');
+
+            XLSX.writeFile(wb, EXCEL_PATH);
+            console.log(`📊 Excel synced: ${EXCEL_PATH}`);
+        } catch (e) {
+            console.error('Excel sync error:', e.message);
+        }
+    }
+
+    loadFromExcel() {
+        if (!fs.existsSync(EXCEL_PATH)) return false;
+
+        try {
+            console.log('📖 Loading data from Excel...');
+            const wb = XLSX.readFile(EXCEL_PATH);
+
+            // Reverse map: sheet name → table name
+            const sheetToTable = {};
+            for (const [table, sheet] of Object.entries(SYNC_TABLES)) {
+                sheetToTable[sheet] = table;
+            }
+
+            for (const sheetName of wb.SheetNames) {
+                const tableName = sheetToTable[sheetName];
+                if (!tableName) continue;
+
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null });
+                if (rows.length === 0) continue;
+
+                // Clear existing data
+                try { this._db.run(`DELETE FROM ${tableName}`); } catch (e) { continue; }
+
+                // Insert rows
+                const columns = Object.keys(rows[0]);
+                const placeholders = columns.map(() => '?').join(',');
+                const insertSql = `INSERT INTO ${tableName} (${columns.join(',')}) VALUES (${placeholders})`;
+
+                for (const row of rows) {
+                    try {
+                        const values = columns.map(c => row[c] === undefined ? null : row[c]);
+                        this._db.run(insertSql, values);
+                    } catch (e) {
+                        // Skip rows that fail (e.g., constraint violations)
+                    }
+                }
+
+                console.log(`  📋 ${sheetName}: ${rows.length} rows loaded`);
+            }
+
+            console.log('✅ Data loaded from Excel successfully');
+            return true;
+        } catch (e) {
+            console.error('Excel load error:', e.message);
+            return false;
+        }
     }
 
     close() {
         if (this._saveTimer) { clearTimeout(this._saveTimer); this.save(); }
+        if (this._excelTimer) { clearTimeout(this._excelTimer); this.saveToExcel(); }
         this._db.close();
     }
 }
 
 // ===================================================================
-//  PostgreSQL Wrapper — for production (Render, etc.)
-// ===================================================================
-class PgWrapper {
-    constructor(pool) {
-        this.pool = pool;
-    }
-
-    prepare(sql) {
-        const pgSql = sqliteToPostgres(sql);
-        const pool = this.pool;
-        return {
-            async run(...params) {
-                // Handle RETURNING id for INSERTs
-                let finalSql = pgSql;
-                if (/^\s*INSERT\s+INTO/i.test(finalSql) && !/RETURNING/i.test(finalSql)) {
-                    // Strip trailing semicolons/whitespace then add RETURNING id
-                    finalSql = finalSql.replace(/[\s;]+$/, '') + ' RETURNING id';
-                }
-                try {
-                    const result = await pool.query(finalSql, params);
-                    return {
-                        lastInsertRowid: result.rows[0]?.id,
-                        changes: result.rowCount
-                    };
-                } catch (e) {
-                    console.error('DB run error:', e.message, '\nSQL:', finalSql.substring(0, 200));
-                    throw e;
-                }
-            },
-            async get(...params) {
-                try {
-                    const result = await pool.query(pgSql, params);
-                    return result.rows[0];
-                } catch (e) {
-                    console.error('DB get error:', e.message, '\nSQL:', pgSql.substring(0, 200));
-                    throw e;
-                }
-            },
-            async all(...params) {
-                try {
-                    const result = await pool.query(pgSql, params);
-                    return result.rows;
-                } catch (e) {
-                    console.error('DB all error:', e.message, '\nSQL:', pgSql.substring(0, 200));
-                    throw e;
-                }
-            }
-        };
-    }
-
-    async exec(sql) {
-        // Split multi-statement SQL and execute each statement individually
-        // This handles cases where pg doesn't support multi-statement queries well
-        const statements = sql
-            .split(/;\s*\n/)
-            .map(s => s.trim())
-            .filter(s => s.length > 0 && !s.startsWith('--') && !s.startsWith('PRAGMA'));
-
-        for (const stmt of statements) {
-            try {
-                await this.pool.query(stmt);
-            } catch (e) {
-                // Skip "already exists" errors for CREATE TABLE/INDEX IF NOT EXISTS
-                if (e.message.includes('already exists')) continue;
-                console.error('Schema exec error:', e.message, '\nStatement:', stmt.substring(0, 150));
-                throw e;
-            }
-        }
-    }
-
-    pragma() { /* no-op for PostgreSQL */ }
-
-    transaction(fn) {
-        const pool = this.pool;
-        return async function (...args) {
-            const client = await pool.connect();
-            try {
-                await client.query('BEGIN');
-                const result = await fn(...args);
-                await client.query('COMMIT');
-                return result;
-            } catch (e) {
-                await client.query('ROLLBACK');
-                throw e;
-            } finally {
-                client.release();
-            }
-        };
-    }
-
-    async close() {
-        await this.pool.end();
-    }
-}
-
-// ===================================================================
-//  Factory: create the right wrapper based on environment
+//  Factory: create the database
 // ===================================================================
 async function createDatabase() {
-    if (process.env.DATABASE_URL) {
-        // PostgreSQL mode
-        const { Pool } = require('pg');
-        const pool = new Pool({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
-        });
-        // Test connection
-        try {
-            const client = await pool.connect();
-            client.release();
-            console.log('🐘 Connected to PostgreSQL');
-        } catch (e) {
-            console.error('❌ PostgreSQL connection failed:', e.message);
-            throw e;
-        }
-        return new PgWrapper(pool);
-    } else {
-        // SQLite mode (local development)
-        const initSqlJs = require('sql.js');
-        const SQL = await initSqlJs();
-        let sqlDb;
+    const initSqlJs = require('sql.js');
+    const SQL = await initSqlJs();
+    let sqlDb;
 
-        if (fs.existsSync(DB_PATH)) {
-            const buffer = fs.readFileSync(DB_PATH);
-            sqlDb = new SQL.Database(buffer);
-        } else {
-            sqlDb = new SQL.Database();
-            const schemaPath = path.join(__dirname, 'schema.sql');
-            const schema = fs.readFileSync(schemaPath, 'utf8');
-            sqlDb.run(schema);
-        }
-        console.log('📦 Using SQLite (sql.js)');
-        return new SqliteWrapper(sqlDb);
+    if (fs.existsSync(DB_PATH)) {
+        const buffer = fs.readFileSync(DB_PATH);
+        sqlDb = new SQL.Database(buffer);
+    } else {
+        sqlDb = new SQL.Database();
+        const schemaPath = path.join(__dirname, 'schema.sql');
+        const schema = fs.readFileSync(schemaPath, 'utf8');
+        sqlDb.run(schema);
     }
+    console.log('📦 Using SQLite (sql.js) + Excel sync');
+    return new SqliteWrapper(sqlDb);
 }
 
-module.exports = { createDatabase, DB_PATH };
+module.exports = { createDatabase, DB_PATH, EXCEL_PATH };

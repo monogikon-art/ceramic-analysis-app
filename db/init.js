@@ -1,6 +1,6 @@
 /**
  * CeramicDB — Database Initialization
- * Works with both SQLite and PostgreSQL
+ * Uses SQLite (sql.js) + Excel file as persistent storage.
  */
 const fs = require('fs');
 const path = require('path');
@@ -9,20 +9,18 @@ const bcrypt = require('bcryptjs');
 async function initDatabase(db) {
     console.log('🏺 Initializing CeramicDB database...');
 
-    // Run schema
-    const isPg = !!process.env.DATABASE_URL;
-    const schemaFile = isPg ? 'schema-pg.sql' : 'schema.sql';
-    const schemaPath = path.join(__dirname, schemaFile);
+    // Run SQLite schema
+    const schemaPath = path.join(__dirname, 'schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf8');
-
-    if (isPg) {
-        // PostgreSQL: execute statements individually (can't batch with PRAGMAs)
-        await db.exec(schema);
-    } else {
-        // SQLite
-        db.exec(schema);
-    }
+    db.exec(schema);
     console.log('✅ Schema created successfully');
+
+    // Try to load existing data from Excel file
+    if (db.loadFromExcel && db.loadFromExcel()) {
+        console.log('📊 Data loaded from Excel — skipping seed');
+        console.log('🏺 CeramicDB initialization complete!');
+        return;
+    }
 
     // Check if we need to seed
     const adminCheck = await db.prepare("SELECT id FROM users WHERE email = 'admin@ceramicdb.local'").get();
@@ -84,6 +82,12 @@ async function initDatabase(db) {
     const projCount = await db.prepare('SELECT COUNT(*) as count FROM projects').get();
     if (projCount.count === 0 || projCount.count === '0') {
         await seedProjects(db, adminId);
+    }
+
+    // Save seeded data to Excel
+    if (db.saveToExcel) {
+        db.saveToExcel();
+        console.log('📊 Initial data saved to Excel');
     }
 
     console.log('🏺 CeramicDB initialization complete!');
